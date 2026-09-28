@@ -101,11 +101,11 @@ Chosen values, all env-configurable, none hardcoded: **2 second minimum delay pe
 
 ## Screenshots
 
-*(add your own screenshots here before submitting, one per row below, so a reviewer doesn't have to run the project to see it)*
 
-| Login | Scheduled list | Compose |
-|---|---|---|
-| `add screenshot` | `add screenshot` | `add screenshot` |
+
+| Dashboard | Scheduled list | Compose | Sent List | Ethereal List |
+|---|---|---|---|---|
+| `add screenshot` | `add screenshot` | `add screenshot` | 'add screenshot' | 'add sc' |
 
 ## How to run it
 
@@ -140,7 +140,6 @@ npm run loadtest -- you@gmail.com 1000 50   # schedules 1000 emails at once with
 
 ## Bugs I hit and fixed
 
-I'm keeping this section honest because most of it only became visible once I actually ran the thing end to end, not while reading the code.
 
 - **The rate-limit requeue crashed the worker.** My first version tried to remove the currently-running BullMQ job and re-add it. BullMQ doesn't allow that; a job can't remove itself mid-execution. Fixed by switching to `job.moveToDelayed()`, which is built for exactly this.
 - **The Compose form's own delay and hourly limit were silently ignored.** The worker only read the env defaults, so a stricter limit set in the UI did nothing. Fixed by reading `batch.hourlyLimit` and `batch.delayMs` inside the worker instead of the env values directly.
@@ -163,8 +162,4 @@ I'm keeping this section honest because most of it only became visible once I ac
 - "Send Later" sets the batch's start time; clicking Send with no time picked starts immediately.
 - The star icon on list rows is a local UI toggle, not persisted to the database.
 
-## Submission
 
-- [ ] Private GitHub repo, access granted to Mitrajit and Yadav036
-- [ ] Demo video (under 5 minutes) linked at the top of this file
-- [ ] ClickUp form filled in with the repo and video links
