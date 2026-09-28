@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EmailStatus {
+  SCHEDULED
+  PROCESSING
+  SENT
+  FAILED
+  RATE_LIMITED_REQUEUED
+}
+
+model User {
+  id              String           @id @default(uuid())
+  googleId        String           @unique
+  email           String           @unique
+  name            String
+  avatarUrl       String?
+  createdAt       DateTime         @default(now())
+  slackConnection SlackConnection?
+  emailBatches    EmailBatch[]
+}
+
+// One "Compose" submission fans out into many ScheduledEmail rows.
+model EmailBatch {
+  id              String           @id
+  userId          String
+  user            User             @relation(fields: [userId], references: [id])
+  subject         String
+  body            String
+  senderEmail     String
+  startTime       DateTime
+  delayMs         Int
+  hourlyLimit     Int
+  // Client-generated key: a double-click / network retry on "Schedule" can never create two batches.
+  idempotencyKey  String?          @unique
+  createdAt       DateTime         @default(now())
+  scheduledEmails ScheduledEmail[]
+}
+
+model ScheduledEmail {
+  id          String      @id
+  batchId     String
+  batch       EmailBatch  @relation(fields: [batchId], references: [id])
+  recipient   String
+  subject     String
+  body        String
+  senderEmail String
+  scheduledAt DateTime
+  sentAt      DateTime?
+  status      EmailStatus @default(SCHEDULED)
+  attempts    Int         @default(0)
+  claimedAt   DateTime?   // set when a worker atomically claims the row (idempotency lock)
+  messageId   String?
+  previewUrl  String?     // Ethereal preview link — proof of a real SMTP send
+  lastError   String?
+  createdAt   DateTime    @default(now())
+
+  @@index([status, scheduledAt])
+  @@index([batchId])
+  @@index([senderEmail])
+}
+
+model SlackConnection {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  accessToken String
+  webhookUrl  String
+  teamName    String
+  connectedAt DateTime @default(now())
+}
