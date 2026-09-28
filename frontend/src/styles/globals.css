@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body { @apply bg-white text-gray-900 font-sans antialiased; }
+
+/* Tailwind's preflight strips list/quote styles; restore them inside the rich-text editor. */
+.rte ul { list-style: disc; padding-left: 1.5rem; }
+.rte ol { list-style: decimal; padding-left: 1.5rem; }
+.rte blockquote { border-left: 3px solid #d1d5db; padding-left: .75rem; color: #6b7280; margin: .25rem 0; }
+.rte:empty::before { content: attr(data-placeholder); color: #9ca3af; }
