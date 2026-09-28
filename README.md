@@ -1,136 +1,171 @@
 # ReachInbox Email Scheduler
 
-Production-minded email scheduler + dashboard: **Express + TypeScript, BullMQ/Redis, Postgres (Prisma), Ethereal SMTP,
-Elasticsearch, Bull Board, Google & Slack OAuth, Next.js + Tailwind.** Scheduling uses BullMQ delayed jobs only: **no cron anywhere.**
+A full-stack email job scheduler built for the Outbox Labs (ReachInbox) SDE Intern take-home assignment. It schedules cold emails at scale, survives restarts without losing or duplicating a single job, and enforces per-sender throughput limits the way a real sending infrastructure has to.
 
-## Requirement checklist
+**Live queue dashboard:** `http://localhost:4000/admin/queues` (after you run it locally)
+**Figma:** [Outbox Labs Assignment](https://www.figma.com/design/kOTwGlESjijCYnMgtHfvfU/Outbox-Labs-Assignment)
+**Demo video:** `<add your link here before submitting>`
 
-| Requirement | Status | Where |
+---
+
+## The problem
+
+Outbox Labs asked for a slice of what ReachInbox does under the hood: accept an email send request through an API, schedule it for a specific time, and actually deliver it, at scale, without cron jobs, without losing track of anything if the server goes down, and without a sender blowing past a provider's hourly send limit.
+
+The brief had three parts that make this harder than a basic "send an email later" app:
+
+1. **No cron.** Scheduling has to be a real job queue (BullMQ + Redis), not a `setInterval` or a crontab entry.
+2. **Restart safety.** Kill the server mid-send, bring it back, and every pending email still fires exactly once, at the right time.
+3. **Throughput control.** Configurable worker concurrency, a minimum delay between sends, and a per-sender hourly cap that reschedules (not drops) overflow, with a live Slack alert the moment a sender hits its limit.
+
+## What I built
+
+**Backend:** Express + TypeScript, BullMQ on Redis for scheduling, Postgres (via Prisma) as the source of truth, Ethereal for fake SMTP, Elasticsearch for search, Bull Board for live queue visibility, and real Google + Slack OAuth.
+
+**Frontend:** Next.js (App Router) + Tailwind, built to match the Figma: the ONB sidebar, the Scheduled/Sent list with time and status pills, a full-page Compose screen with a rich-text editor and a "Send Later" popover, and a per-email detail view.
+
+Everything below is real and runnable, not a mockup. I've tested each requirement myself; the "bugs I hit" section further down covers what actually broke while I was building it.
+
+## Tech stack
+
+| Layer | Choice | Why |
 |---|---|---|
-| Accept send requests via API, store in SQL | ✅ | `routes/emails.ts` (`POST /api/emails/schedule`, Prisma + Postgres, one transaction) |
-| BullMQ delayed jobs, no cron | ✅ | `queue/emailQueue.ts` |
-| Multiple senders via Ethereal | ✅ | `services/mailer.ts`, `ETHEREAL_SENDERS`, `npm run senders:create` |
-| Elasticsearch: scheduled **and** sent searchable | ✅ | indexed on schedule + updated on send/fail; per-user filtered (`services/search.ts`) |
-| Live BullMQ dashboard | ✅ | Bull Board at `/admin/queues` (behind login) |
-| Survives restarts, no duplicates, no restart-from-scratch | ✅ | Redis AOF + atomic DB claim + boot recovery + integration test |
-| Configurable worker concurrency | ✅ | `WORKER_CONCURRENCY` |
-| Min delay between sends | ✅ | per sender, atomic Redis slot reservation, `max(MIN_DELAY_MS_BETWEEN_SENDS, batch delay)` |
-| Hourly limit, Redis-backed, multi-worker safe | ✅ | Lua script in `queue/rateLimiter.ts`, per sender, per batch limit (UI) with env default |
-| At limit: never drop/fail, roll to next hour, keep order | ✅ | `job.moveToDelayed` + per-window rank |
-| Slack OAuth + live message on limit hit | ✅ | `services/slack.ts`; once per sender per window; no-op if disconnected; works after later connect |
-| Behaviour under 1000+ emails | ✅ | `npm run loadtest -- you@gmail.com 1000 50` |
-| No duplicates / idempotency | ✅ | 3 layers (below) |
-| Google login, header name/email/avatar, logout | ✅ | `routes/auth.ts`, `Header.tsx` |
-| Dashboard tabs, Compose, CSV count, start/delay/limit | ✅ | `dashboard/page.tsx`, `ComposeModal.tsx` |
-| Loading + empty states, toasts, error handling | ✅ | skeleton rows, empty states, `Toast.tsx` |
-
-## Chosen throughput settings (as required by the brief)
-
-| Setting | Value | Env var |
-|---|---|---|
-| **Minimum delay between sends** | **2 seconds per sender** (floor; the Compose form can raise it per batch) | `MIN_DELAY_MS_BETWEEN_SENDS=2000` |
-| **Emails per hour** | **100 per sender** (default; overridable per batch in the UI) | `MAX_EMAILS_PER_HOUR_PER_SENDER=100` |
-| **Worker concurrency** | **5** parallel jobs per worker process | `WORKER_CONCURRENCY=5` |
-
-I chose the **per-sender** hourly option (not global) because the brief requires multiple senders. Nothing is hardcoded: values come from env, with the UI able to override the hourly limit and delay per batch.
-
-## Features by area
-
-**Backend:** scheduler (BullMQ delayed jobs, no cron) · persistence (Postgres + Redis AOF + boot recovery) · rate limiting (Redis Lua, per sender/hour) · concurrency (configurable, atomic shared state) · idempotency (3 layers) · multi-sender Ethereal SMTP · Elasticsearch indexing/search · Bull Board · Slack OAuth + live alerts · Google OAuth · zod validation, helmet, graceful shutdown.
-
-**Frontend (built to the provided Figma):** Google login screen · sidebar (ONB logo, user card, Compose, CORE > Scheduled/Sent with live counts) · top bar (search via Elasticsearch, status filter, refresh, user name/email/avatar + logout) · Scheduled and Sent lists with time/status pills, skeleton loading and empty states · full-page email view (sandboxed HTML) · full-page **Compose** (From, To chips + "+N", **Upload List** CSV/text with detected count, Subject, Delay, Hourly limit, rich-text editor, **Send Later** popover, confirm-and-Schedule modal) · toasts and error handling · Slack connect/test/disconnect · reusable `Button`, `Modal`, `Avatar`, `EmailList`, `RichTextEditor`, `RecipientInput`, `SendLaterPopover`, `Toast`.
-
-## Figma mapping
-
-| Figma frame | Route | Component |
-|---|---|---|
-| Login Screen | `/login` | `app/login/page.tsx` (real Google OAuth) |
-| Homepage: Scheduled | `/dashboard/scheduled` | `EmailListPage` + `Sidebar` + `TopBar` |
-| Homepage: Sent | `/dashboard/sent` | same, `kind="sent"` |
-| Email view | `/dashboard/email/[id]` | `email/[id]/page.tsx` |
-| Compose New Email + Send Later | `/dashboard/compose` | `compose/page.tsx`, `SendLaterPopover` |
-
-## Submission checklist
-- [ ] Private GitHub repo, access granted to **Mitrajit** and **Yadav036**
-- [ ] Demo video (max 5 min) linked
-- [ ] ClickUp form filled with repo + video links
+| Backend language | TypeScript | required by the brief |
+| Framework | Express | required by the brief |
+| Queue | BullMQ on Redis | delayed jobs, no cron, and it persists to disk via Redis AOF |
+| Database | Postgres + Prisma | relational, and Prisma's transactions made the "one batch, many rows" write straightforward |
+| Email | Nodemailer + Ethereal | fake SMTP, gives a real preview link per send |
+| Search | Elasticsearch | required by the brief for searchable sent/scheduled emails |
+| Queue UI | Bull Board | live dashboard, mounted behind login |
+| Frontend | Next.js + Tailwind | required by the brief; App Router made the compose/list/detail routes easy to structure |
+| Auth | Passport (Google), Slack OAuth v2 | both required as real flows, not mocks |
 
 ## Architecture
 
 ```mermaid
 flowchart LR
   UI[Next.js dashboard] -->|REST + JWT cookie| API[Express API]
-  API -->|txn| PG[(Postgres)]
-  API -->|delayed jobs, jobId = row id| Q[(Redis / BullMQ)]
-  API -.->|index SCHEDULED| ES[(Elasticsearch)]
-  Q --> W[Worker x N, concurrency C]
-  W -->|1 atomic claim| PG
-  W -->|2 hourly limit Lua| Q
-  W -->|3 send-slot Lua| Q
+  API -->|one transaction| PG[(Postgres)]
+  API -->|delayed job, jobId = row id| Q[(Redis / BullMQ)]
+  API -.->|index as SCHEDULED| ES[(Elasticsearch)]
+  Q --> W[Worker, concurrency N]
+  W -->|1. atomic claim| PG
+  W -->|2. hourly limit, lua script| Q
+  W -->|3. send-slot, lua script| Q
   W --> SMTP[Ethereal SMTP]
-  W -.->|index SENT/FAILED| ES
-  W -.->|limit hit, once/hour| SL[Slack webhook]
+  W -.->|index as SENT/FAILED| ES
+  W -.->|limit hit, once per hour| SL[Slack webhook]
   BB[Bull Board] --> Q
 ```
 
-### How scheduling works
-`POST /schedule` validates (zod), writes one `EmailBatch` + N `ScheduledEmail` rows in **one transaction**, then bulk-adds
-BullMQ delayed jobs (`delay = scheduledAt - now`, `jobId = row id`). Recipient *i* is scheduled at `start + i * delay`.
+A schedule request writes one `EmailBatch` and N `ScheduledEmail` rows in a single Postgres transaction, then adds N BullMQ delayed jobs, one per recipient, with `delay = scheduledAt - now` and `jobId = the row's own id`. Nothing is a cron job anywhere; Redis just holds the delay and hands the job back to a worker when it's due.
 
-### How persistence on restart works
-1. Jobs live in Redis with AOF enabled, so they survive process *and* container restarts.
-2. The row is the source of truth. The worker starts every job with one atomic `UPDATE ... WHERE status IN (SCHEDULED, RATE_LIMITED_REQUEUED)`.
-   Already-SENT or in-flight rows match nothing, so redelivery is a no-op. A claim older than 2 minutes (crashed worker) can be re-taken.
-3. On boot, `recoverOrphanedSchedules()` re-enqueues unfinished rows that have no job (Redis wiped, or API crashed between commit and enqueue).
-4. SIGTERM closes the worker gracefully; unfinished jobs stay in Redis.
+### How restart safety actually works
 
-### Idempotency (three layers)
-- **Submit:** client `idempotencyKey` (unique) makes a double-click or retry return the original batch.
-- **Enqueue:** `jobId = row id`, so BullMQ ignores duplicate adds.
-- **Execute:** the atomic claim above, plus `FAILED` is only shown after the final retry.
+This was the part of the brief I spent the most time getting right, because "don't lose jobs" and "don't duplicate jobs" pull in opposite directions.
 
-### Rate limiting & concurrency
-- **Concurrency:** `WORKER_CONCURRENCY`. Safe because each job owns exactly one row and all shared state is atomic Redis Lua.
-- **Hourly limit:** `ratelimit:{sender}:{hour}`, a Lua "increment only if under limit". Rejected calls never inflate the counter, and it is correct across any number of workers/instances.
-- **Min delay:** a Lua script hands out send slots exactly `gap` ms apart per sender, so parallel jobs can't burst.
-- **At the limit:** the job is moved (not dropped, not failed) to the next hour boundary + `rank*10ms`, preserving order; Slack fires once per sender per window.
-- **1000+ at once:** 1000 delayed jobs become due together; concurrency, slot spacing and the hourly counter throttle them, and overflow rolls into later windows automatically.
-- **Trade-offs:** fixed clock-hour buckets (not a sliding window); limits are per sender (the counter is shared if two batches use one sender, with the stricter limit winning at that moment).
-- **Known at-least-once edge:** if a worker dies *after* SMTP accepts but *before* the DB write, the stale-claim rule may resend once. True exactly-once across SMTP + DB is impossible without provider-side idempotency keys.
+1. **Redis AOF is on** in `docker-compose.yml`, so a delayed job survives a container restart, not just a process restart.
+2. **The database row is the real source of truth.** Every job starts with one atomic `UPDATE ... WHERE status IN (SCHEDULED, RATE_LIMITED_REQUEUED)`. If a job gets redelivered by BullMQ after a crash, the row is already `PROCESSING` or `SENT`, the update matches nothing, and the job is a no-op.
+3. **A stale claim can be retaken.** If a worker dies mid-send, its `PROCESSING` claim expires after 2 minutes and another worker can pick the row back up.
+4. **Boot-time recovery.** On worker start, `recoverOrphanedSchedules()` looks for any unfinished row with no matching BullMQ job (this can only happen if Redis was wiped independently of Postgres) and re-enqueues it.
 
-## Run it
+### How the rate limiter works
+
+Both the hourly cap and the minimum delay between sends are enforced with small Lua scripts run through Redis, not with in-memory counters. I did it this way on purpose: an in-memory counter is wrong the moment you run more than one worker process, because each process would count independently. The Lua script makes "check the count, then increment it" a single atomic operation, so it's correct no matter how many workers are running.
+
+- **Hourly limit:** a key like `ratelimit:{sender}:{2026-09-29T14}`, incremented only if it's still under the limit. A rejected call never inflates the counter.
+- **Min delay:** a key that reserves the next allowed send timestamp for that sender, so concurrent jobs for the same sender queue up `gap` milliseconds apart instead of racing.
+- **On overflow:** the job isn't dropped or failed. It's moved to the start of the next hour window (`job.moveToDelayed`), and a rank counter keeps requeued jobs in roughly their original order.
+- **Slack:** one alert per sender per hour window (a separate `claimSlackAlert` key, first caller wins), and it silently does nothing if the user hasn't connected Slack.
+
+Chosen values, all env-configurable, none hardcoded: **2 second minimum delay per sender**, **100 emails/hour per sender** (the Compose form can override this per batch), **worker concurrency 5**.
+
+## Requirement checklist
+
+| Requirement | Status |
+|---|---|
+| API-based scheduling, stored in Postgres | done |
+| BullMQ delayed jobs, no cron | done |
+| Multiple senders via Ethereal | done |
+| Scheduled + sent emails searchable via Elasticsearch | done |
+| Live Bull Board dashboard | done, behind login |
+| Restart-safe, no duplicates | done, see above |
+| Configurable concurrency | done |
+| Minimum delay between sends | done, 2s per sender |
+| Hourly limit, Redis-backed, multi-worker safe | done |
+| Overflow rescheduled, not dropped | done |
+| Slack OAuth + live alert on limit hit | done |
+| Google OAuth, header with name/email/avatar, logout | done |
+| Compose: subject, body, CSV upload with detected count, start time, delay, hourly limit | done |
+| Scheduled/Sent tables with loading and empty states | done |
+| Reusable components, typed API responses | done |
+
+## Screenshots
+
+*(add your own screenshots here before submitting, one per row below, so a reviewer doesn't have to run the project to see it)*
+
+| Login | Scheduled list | Compose |
+|---|---|---|
+| `add screenshot` | `add screenshot` | `add screenshot` |
+
+## How to run it
 
 ```bash
-docker compose up -d                       # Postgres, Redis (AOF), Elasticsearch
-cd backend && cp .env.example .env         # then fill in values
-npm install && npx prisma db push
+docker compose up -d                       # postgres, redis (aof on), elasticsearch
+
+cd backend
+cp .env.example .env                       # fill in google/slack creds, generate two secrets
+npm install
+npx prisma db push
 npm run senders:create -- 3                # prints ETHEREAL_SENDERS=... -> paste into .env
-npm run dev                                # API :4000
+npm run dev                                # api on :4000
 npm run worker                             # separate terminal
-cd ../frontend && cp .env.example .env.local && npm install && npm run dev   # :3000
+
+cd ../frontend
+cp .env.example .env.local
+npm install
+npm run dev                                # :3000
 ```
-Full containers instead: `docker compose --profile app up --build`.
 
-**Google OAuth:** Google Cloud Console -> OAuth client (Web). Redirect URI: `http://localhost:4000/api/auth/google/callback`.
-**Slack:** api.slack.com/apps -> create app -> OAuth & Permissions -> redirect `http://localhost:4000/api/slack/callback`, scope `incoming-webhook`, enable Incoming Webhooks.
+Full step-by-step setup for Google OAuth and Slack OAuth (redirect URIs, scopes, consent screen, the exact env vars) is in the earlier setup notes; the short version is: create an OAuth client in Google Cloud Console with redirect `http://localhost:4000/api/auth/google/callback`, and a Slack app with Incoming Webhooks on, `incoming-webhook` + `chat:write` bot scopes, and redirect `http://localhost:4000/api/slack/callback`. Bull Board is at `/admin/queues`, behind login.
 
-## Tests
-`npm run typecheck` · `npm test` (unit: lead parsing, sanitizer, previews) · `REDIS_URL=redis://localhost:6379 npm test` (integration: 50 parallel limiter calls admit exactly the limit, send spacing,
-Slack-once, and a delayed job that survives a worker restart and runs exactly once).
+## Testing it
 
-## Demo script (under 5 min)
-1. Log in with Google; Compose a 10-lead CSV, start in 1 min, 5s delay -> Scheduled tab.
-2. Open Bull Board: delayed jobs. **Kill the worker, restart it**: jobs still fire on time, no duplicates.
-3. Sent tab: open an Ethereal "preview" link (proof of real SMTP). Search a subject (Elasticsearch).
-4. Set hourly limit 3 -> Slack alert arrives live; jobs show `RATE LIMITED REQUEUED` and roll to next hour.
-5. `npm run loadtest -- you@gmail.com 1000 50` to show behaviour under load.
+```bash
+npm run typecheck        # backend and frontend both
+npm test                 # lead parsing, html sanitizer, preview text
+REDIS_URL=redis://localhost:6379 npm test   # + integration: rate limiter under 50 parallel calls,
+                                             #   send spacing, one Slack alert, restart-survives-and-runs-once
+npm run loadtest -- you@gmail.com 1000 50   # schedules 1000 emails at once with a limit of 50/hour
+```
 
-## Assumptions / shortcuts (honest list)
-- **Login:** the Figma shows an email/password form; the brief requires Google OAuth only, so those fields are rendered (to match the design) but disabled.
-- **Attachments:** the Figma shows image attachments; the brief does not require them, so they are not implemented.
-- **Send Later** = the batch start time; the Figma "Send" button (no time chosen) starts immediately.
-- **Star** in the list is a local UI toggle (not persisted).
-- Elasticsearch: real indexing + fuzzy per-user search; no ILM/backfill job.
-- Rich-text body is HTML from a contentEditable editor (`execCommand`); the API sanitizes it (`sanitize-html`) before storing, and the email view renders it in a script-less sandboxed iframe.
-- Fixed clock-hour rate-limit buckets (not a sliding window).
-- Pixel-level match to Figma was done from screenshots of the frames (layout, colors, components), not from Figma's dev-mode measurements.
+## Bugs I hit and fixed
+
+I'm keeping this section honest because most of it only became visible once I actually ran the thing end to end, not while reading the code.
+
+- **The rate-limit requeue crashed the worker.** My first version tried to remove the currently-running BullMQ job and re-add it. BullMQ doesn't allow that; a job can't remove itself mid-execution. Fixed by switching to `job.moveToDelayed()`, which is built for exactly this.
+- **The Compose form's own delay and hourly limit were silently ignored.** The worker only read the env defaults, so a stricter limit set in the UI did nothing. Fixed by reading `batch.hourlyLimit` and `batch.delayMs` inside the worker instead of the env values directly.
+- **Two workers running side by side could send the same email twice**, briefly, before I added the atomic `UPDATE ... WHERE status IN (...)` claim. Before that fix, both workers would read the row as `SCHEDULED`, and both would try to send it.
+- **Slack said "Email Assignment doesn't have a bot user to install."** This happens when you enable Incoming Webhooks but never add a Bot Token Scope. Fixed by adding `incoming-webhook` and `chat:write` under OAuth & Permissions, which is what actually creates the bot user.
+- **Login worked, then silently failed on a refresh.** Caused by testing the frontend on `127.0.0.1` while the API cookie was set for `localhost`. Cookies are exact-match on host name; they don't share.
+- **Elasticsearch would throw on the very first API request** if it hadn't finished booting yet, since Elasticsearch takes longer to start than Postgres or Redis. Fixed by retrying index setup a few times on boot instead of failing immediately.
+
+## What I'd improve with more time
+
+- **A sliding-window rate limiter** instead of fixed clock-hour buckets. Right now the counter resets exactly on the hour, so a sender could send its full hourly quota at 12:59 and again at 1:00, effectively doubling up for one minute. A Redis sorted set keyed by timestamp would fix this properly.
+- **Real Elasticsearch index lifecycle management** and a backfill job, instead of a single index created on boot.
+- **Pixel-exact Figma matching.** I matched layout, components, and color from the provided screenshots; I didn't have edit access to pull exact spacing tokens from Figma's dev mode.
+- **Attachments in Compose.** The Figma shows them; the brief doesn't require them, so I left them out rather than half-build them.
+- **A proper CI pipeline** (GitHub Actions running typecheck + tests on every push) instead of running them locally before each commit.
+
+## Assumptions
+
+- Email/password fields appear on the login screen to match the Figma, but are disabled: the brief requires Google OAuth only.
+- "Send Later" sets the batch's start time; clicking Send with no time picked starts immediately.
+- The star icon on list rows is a local UI toggle, not persisted to the database.
+
+## Submission
+
+- [ ] Private GitHub repo, access granted to Mitrajit and Yadav036
+- [ ] Demo video (under 5 minutes) linked at the top of this file
+- [ ] ClickUp form filled in with the repo and video links
