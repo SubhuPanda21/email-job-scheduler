@@ -103,9 +103,9 @@ Chosen values, all env-configurable, none hardcoded: **2 second minimum delay pe
 
 
 
-| Dashboard | Scheduled list | Compose | Sent List | Ethereal List |
-|---|---|---|---|---|
-| `add screenshot` | `add screenshot` | `add screenshot` | 'add screenshot' | 'add sc' |
+| Dashboard | Scheduled list | Compose | Sent List | Ethereal Preview | Bull Dashboard |
+|---|---|---|---|---|---|
+| `add screenshot` | `add screenshot` | `add screenshot` | 'add screenshot' | 'add sc' | 'add sc' |
 
 ## How to run it
 
