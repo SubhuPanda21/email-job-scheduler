@@ -3,8 +3,7 @@ import { redisConnection } from "../redis/client";
 
 export const EMAIL_QUEUE_NAME = "email-send";
 
-// The ONLY scheduling mechanism in the system: BullMQ delayed jobs stored in Redis (AOF on).
-// No cron, no setInterval, no node-cron.
+
 export const emailQueue = new Queue(EMAIL_QUEUE_NAME, {
   connection: redisConnection,
   defaultJobOptions: {
@@ -15,10 +14,7 @@ export const emailQueue = new Queue(EMAIL_QUEUE_NAME, {
   },
 });
 
-/**
- * jobId === ScheduledEmail.id. BullMQ silently ignores a second add() with an existing jobId,
- * so a job can never be enqueued twice for the same row (idempotent enqueue).
- */
+
 export async function enqueueMany(items: { id: string; runAt: Date }[]) {
   if (!items.length) return;
   await emailQueue.addBulk(

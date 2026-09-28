@@ -15,9 +15,7 @@ const STALE_CLAIM_MS = 2 * 60 * 1000;
 async function processJob(job: Job<{ scheduledEmailId: string }>, token?: string) {
   const id = job.data.scheduledEmailId;
 
-  // 1) IDEMPOTENT CLAIM - one atomic UPDATE decides which worker owns the row.
-  //    SENT / already-PROCESSING rows match nothing -> a redelivered or duplicate job is a no-op.
-  //    A PROCESSING row is only re-claimable if its claim is stale (worker died mid-flight).
+  
   const claim = await prisma.scheduledEmail.updateMany({
     where: {
       id,
@@ -35,14 +33,12 @@ async function processJob(job: Job<{ scheduledEmailId: string }>, token?: string
     include: { batch: true },
   });
 
-  // 2) HOURLY LIMIT (Redis Lua, per sender, cross-instance safe). Limit comes from the batch (UI), not env.
   const slot = await tryConsumeSlot(email.senderEmail, email.batch.hourlyLimit);
   if (!slot.allowed) {
     await prisma.scheduledEmail.update({
       where: { id },
       data: { status: "RATE_LIMITED_REQUEUED", claimedAt: null },
     });
-    // Slack: exactly one alert per sender per hour window, never crashes the job.
     if (await claimSlackAlert(email.senderEmail)) {
       await notifyRateLimitHit({
         userId: email.batch.userId,
@@ -51,13 +47,11 @@ async function processJob(job: Job<{ scheduledEmailId: string }>, token?: string
         resumeAt: slot.resumeAt,
       });
     }
-    // Not dropped, not failed: move THIS job to the next hour window (order kept via rank).
     const rank = await requeueRank(email.senderEmail, slot.resumeAt);
     await job.moveToDelayed(slot.resumeAt.getTime() + rank * 10, token);
     throw new DelayedError();
   }
 
-  // 3) MIN DELAY BETWEEN SENDS - atomic per-sender slot reservation.
   await waitForSendSlot(email.senderEmail, Math.max(env.minDelayMsBetweenSends, email.batch.delayMs));
 
   try {
@@ -91,7 +85,6 @@ async function processJob(job: Job<{ scheduledEmailId: string }>, token?: string
       sentAt,
     }).catch((e) => console.error("[es] index failed (non-fatal):", e.message));
   } catch (err: any) {
-    // Only show FAILED once retries are exhausted; otherwise it is still pending.
     const finalAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
     await prisma.scheduledEmail.update({
       where: { id },
@@ -115,14 +108,14 @@ async function processJob(job: Job<{ scheduledEmailId: string }>, token?: string
         sentAt: null,
       }).catch(() => undefined);
     }
-    throw err; // BullMQ applies exponential backoff and retries
+    throw err; 
   }
 }
 
 async function main() {
   const worker = new Worker(EMAIL_QUEUE_NAME, processJob, {
     connection: redisConnection,
-    concurrency: env.workerConcurrency, // configurable via WORKER_CONCURRENCY
+    concurrency: env.workerConcurrency, 
   });
   worker.on("failed", (job, err) => console.error(`[worker] job ${job?.id} failed: ${err.message}`));
   worker.on("completed", (job) => console.log(`[worker] job ${job.id} done`));
@@ -132,7 +125,7 @@ async function main() {
 
   const shutdown = async () => {
     console.log("[worker] shutting down gracefully...");
-    await worker.close(); // lets in-flight jobs finish; unfinished ones stay safely in Redis
+    await worker.close(); 
     process.exit(0);
   };
   process.on("SIGINT", shutdown);

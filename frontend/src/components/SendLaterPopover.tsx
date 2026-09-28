@@ -12,7 +12,6 @@ const PRESETS = [
   { label: "Tomorrow, 3:00 PM", value: () => tomorrowAt(15) },
 ];
 
-/** Figma "Send Later" card: pick a date & time or a preset, then Done. This sets the batch start time. */
 export function SendLaterPopover({ value, onApply, onClose }: { value: string; onApply: (v: string) => void; onClose: () => void }) {
   const [pending, setPending] = useState(value);
   return (

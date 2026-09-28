@@ -3,7 +3,6 @@ import { env } from "../config/env";
 import jwt from "jsonwebtoken";
 
 export function signSlackState(userId: string): string {
-  // Signed + 10 min expiry: prevents forging another user's id in the OAuth callback (CSRF).
   return jwt.sign({ userId, purpose: "slack" }, env.jwtSecret, { expiresIn: "10m" });
 }
 export function verifySlackState(state: string): string {
@@ -42,10 +41,9 @@ export async function exchangeSlackCode(code: string) {
   };
 }
 
-/** Posts to the user's connected Slack. Looked up fresh from the DB every call, so connecting later works with no redeploy. */
 export async function postToSlack(userId: string, text: string): Promise<boolean> {
   const conn = await prisma.slackConnection.findUnique({ where: { userId } });
-  if (!conn) return false; // not connected: silently skip, never crash
+  if (!conn) return false; 
   try {
     const res = await fetch(conn.webhookUrl, {
       method: "POST",

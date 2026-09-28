@@ -22,19 +22,16 @@ app.use(passport.initialize());
 app.use("/api/auth", authRoutes);
 app.use("/api/emails", emailRoutes);
 app.use("/api/slack", slackRoutes);
-// Live BullMQ dashboard - behind login so queue internals are never public.
 app.use("/admin/queues", requireAuth, mountBullBoard());
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-// Generic error handler: never leak stack traces to clients.
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
   res.status(500).json({ error: "Internal server error" });
 });
 
 async function start() {
-  // Elasticsearch may still be booting; retry a few times instead of failing the API.
   for (let i = 0; i < 5; i++) {
     try { await ensureIndex(); break; } catch (e: any) {
       console.warn(`[es] index setup attempt ${i + 1} failed: ${e.message}`);

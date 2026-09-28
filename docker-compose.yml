@@ -13,7 +13,6 @@ services:
   redis:
     image: redis:7-alpine
     restart: always
-    # AOF persistence so BullMQ jobs survive a container/host restart, not just process restart
     command: redis-server --appendonly yes
     ports: ["6379:6379"]
     volumes: ["redisdata:/data"]
@@ -28,7 +27,6 @@ services:
     ports: ["9200:9200"]
     volumes: ["esdata:/usr/share/elasticsearch/data"]
 
-  # Optional full-stack mode:  docker compose --profile app up --build
   api:
     profiles: ["app"]
     build: ./backend

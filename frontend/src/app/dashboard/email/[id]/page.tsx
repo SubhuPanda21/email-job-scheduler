@@ -9,7 +9,6 @@ import { useUser } from "@/components/UserProvider";
 import { Avatar } from "@/components/Avatar";
 import { useToast } from "@/components/Toast";
 
-/** Rendered inside a sandboxed iframe (no scripts) so email HTML can never touch the app. */
 const wrap = (html: string) =>
   `<!doctype html><meta charset="utf-8"><base target="_blank"><style>body{font:14px/1.6 Inter,system-ui,sans-serif;color:#111;margin:0}blockquote{border-left:3px solid #d1d5db;margin:.5rem 0;padding-left:.75rem;color:#6b7280}</style>${html}`;
 
@@ -23,7 +22,7 @@ export default function EmailDetailPage() {
 
   useEffect(() => {
     api.email(id).then(setEmail).catch((e) => { toast.push("error", e.message); router.replace("/dashboard/scheduled"); });
-  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id]); 
 
   const pending = email && ["SCHEDULED", "PROCESSING", "RATE_LIMITED_REQUEUED"].includes(email.status);
   return (

@@ -7,7 +7,6 @@ import { useSlack } from "@/hooks";
 
 const item = "w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50";
 
-/** Dropdown for the account: Slack connect/test/disconnect, live queue dashboard, logout. */
 export function AccountMenu({ trigger, align = "left" }: { trigger: (open: boolean) => ReactNode; align?: "left" | "right" }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);

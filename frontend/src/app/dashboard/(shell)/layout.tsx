@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Sidebar } from "@/components/Sidebar";
 
-/** Sidebar shell for the list screens; live counts (Scheduled 12 / Sent 785) polled from /stats. */
 export default function ShellLayout({ children }: { children: React.ReactNode }) {
   const [counts, setCounts] = useState({ scheduled: 0, sent: 0 });
   useEffect(() => {

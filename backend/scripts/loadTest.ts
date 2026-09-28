@@ -4,8 +4,7 @@ import { prisma } from "../src/db/prisma";
 import { enqueueMany } from "../src/queue/emailQueue";
 import { listSenders } from "../src/services/mailer";
 
-// Usage: npm run loadtest -- you@gmail.com 1000 50
-//   -> schedules 1000 emails "for the same instant" with hourly limit 50, to demo behaviour under load.
+
 async function main() {
   const [email, count = "1000", limit = "50"] = process.argv.slice(2);
   const user = await prisma.user.findUnique({ where: { email } });

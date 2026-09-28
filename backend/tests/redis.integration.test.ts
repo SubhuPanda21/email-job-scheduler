@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Queue, Worker } from "bullmq";
 import IORedis from "ioredis";
 
-// Integration tests need a real Redis: REDIS_URL=redis://localhost:6379 npm test
 process.env.DATABASE_URL ??= "postgresql://x:x@localhost/x";
 const url = process.env.REDIS_URL ?? "redis://localhost:6379";
 const run = process.env.REDIS_URL || process.env.CI ? describe : describe.skip;
@@ -48,11 +47,11 @@ run("redis-backed limiter + BullMQ persistence", () => {
   it("a delayed job survives a worker restart and runs exactly once", async () => {
     const q = new Queue("persist-test", { connection: conn });
     await q.add("j", { n: 1 }, { jobId: "job-1", delay: 1500 });
-    await q.add("j", { n: 1 }, { jobId: "job-1", delay: 1500 }); // duplicate jobId ignored (idempotent enqueue)
+    await q.add("j", { n: 1 }, { jobId: "job-1", delay: 1500 });
 
-    // "Server 1" starts and is killed before the job is due
+    
     const w1 = new Worker("persist-test", async () => { throw new Error("should not run yet"); }, { connection: new IORedis(url, { maxRetriesPerRequest: null }) });
-    await w1.close(); // simulated crash/restart
+    await w1.close(); 
 
     let runs = 0;
     const done = new Promise<void>((resolve) => {

@@ -2,7 +2,6 @@ import { parse } from "csv-parse/sync";
 
 const EMAIL_REGEX = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 
-/** Extracts unique, valid, lower-cased email addresses from CSV or plain text. */
 export function extractEmails(text: string): string[] {
   let cells: string[] = [];
   try {

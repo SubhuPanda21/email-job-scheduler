@@ -9,7 +9,6 @@ interface Props {
   onUpload: (file: File) => void;
 }
 
-/** "To" row: removable chips (first 3 + "+N"), type-to-add, and the "Upload List" CSV/text action. */
 export function RecipientInput({ emails, onChange, onUpload }: Props) {
   const [draft, setDraft] = useState("");
   const [expanded, setExpanded] = useState(false);

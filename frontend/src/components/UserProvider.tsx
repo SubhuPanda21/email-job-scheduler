@@ -12,7 +12,6 @@ export function useUser(): User {
   return u;
 }
 
-/** Auth gate: real session check against the API; unauthenticated visitors go to /login. */
 export function UserProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);

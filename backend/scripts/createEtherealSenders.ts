@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
 
-// Usage: npm run senders:create -- 3   -> prints a ready-to-paste ETHEREAL_SENDERS line
+
 async function main() {
   const n = Number(process.argv[2] ?? 2);
   const pairs: string[] = [];

@@ -1,16 +1,11 @@
 import { redisConnection as redis } from "../redis/client";
 
-/**
- * All shared state lives in Redis and every read-modify-write is a Lua script,
- * which Redis executes atomically. That is what makes this correct with N workers
- * x M concurrency, on one machine or many. No in-memory counters anywhere.
- */
 
 const HOUR_MS = 60 * 60 * 1000;
 const hourStart = (d: Date) => new Date(Math.floor(d.getTime() / HOUR_MS) * HOUR_MS);
-const bucketId = (d: Date) => d.toISOString().slice(0, 13); // e.g. 2026-09-28T14
+const bucketId = (d: Date) => d.toISOString().slice(0, 13); 
 
-// Consume one slot ONLY if under the limit (a rejected call never inflates the counter).
+
 const CONSUME_SLOT = `
 local c = tonumber(redis.call('GET', KEYS[1]) or '0')
 if c >= tonumber(ARGV[1]) then return {0, c} end
@@ -19,8 +14,7 @@ if c == 1 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2])) end
 return {1, c}
 `;
 
-// Reserve the next send time for a sender: slots are handed out exactly `gap` ms apart,
-// no matter how many concurrent jobs ask at once.
+
 const RESERVE_SEND_TIME = `
 local now = tonumber(ARGV[1])
 local gap = tonumber(ARGV[2])
@@ -50,7 +44,6 @@ export async function waitForSendSlot(senderEmail: string, gapMs: number): Promi
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
 }
 
-/** Rank inside the next window, so requeued jobs keep their relative order (10ms apart). */
 export async function requeueRank(senderEmail: string, resumeAt: Date): Promise<number> {
   const key = `requeue:${senderEmail}:${bucketId(resumeAt)}`;
   const rank = await redis.incr(key);
@@ -58,7 +51,7 @@ export async function requeueRank(senderEmail: string, resumeAt: Date): Promise<
   return rank;
 }
 
-/** True only for the FIRST blocked job of a sender in an hour window -> exactly one Slack alert. */
+
 export async function claimSlackAlert(senderEmail: string): Promise<boolean> {
   const key = `slackalert:${senderEmail}:${bucketId(new Date())}`;
   return (await redis.set(key, "1", "EX", 3700, "NX")) === "OK";

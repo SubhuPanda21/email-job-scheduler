@@ -27,7 +27,6 @@ const scheduleSchema = z.object({
   idempotencyKey: z.string().min(8).max(100).optional(),
 });
 
-// Env-driven defaults so the UI and API share one source of truth (nothing hardcoded).
 router.get("/config", requireAuth, (_req, res) =>
   res.json({ hourlyLimit: env.maxEmailsPerHourPerSender, delayMs: env.minDelayMsBetweenSends, maxBatch: MAX_BATCH })
 );
@@ -50,7 +49,6 @@ router.post("/schedule", requireAuth, async (req: AuthedRequest, res) => {
     return res.status(400).json({ error: `Unknown sender. Configured senders: ${listSenders().join(", ") || "none"}` });
   }
 
-  // Idempotent submit: same key => return the original batch instead of creating a second one.
   if (d.idempotencyKey) {
     const existing = await prisma.emailBatch.findUnique({
       where: { idempotencyKey: d.idempotencyKey },
@@ -75,7 +73,6 @@ router.post("/schedule", requireAuth, async (req: AuthedRequest, res) => {
     scheduledAt: new Date(base + i * d.delayMs),
   }));
 
-  // One transaction: a batch never exists half-written.
   await prisma.$transaction([
     prisma.emailBatch.create({
       data: {
@@ -93,10 +90,8 @@ router.post("/schedule", requireAuth, async (req: AuthedRequest, res) => {
     prisma.scheduledEmail.createMany({ data: rows }),
   ]);
 
-  // If enqueue fails here the rows are safe in Postgres and the worker's boot recovery re-enqueues them.
   await enqueueMany(rows.map((r) => ({ id: r.id, runAt: r.scheduledAt })));
 
-  // Searchable immediately as SCHEDULED (non-blocking: ES being down never blocks scheduling).
   bulkIndex(rows.map((r) => ({ ...r, userId: req.userId!, status: "SCHEDULED", sentAt: null }))).catch((e) =>
     console.error("[es] bulk index failed:", e.message)
   );
@@ -109,8 +104,6 @@ const listSelect = {
   sentAt: true, status: true, previewUrl: true, lastError: true,
 } as const;
 
-// List rows carry a short plain-text preview instead of the full HTML body.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const toListItem = ({ body, ...rest }: any) => ({ ...rest, preview: htmlToPreview(body ?? "") });
 
 router.get("/scheduled", requireAuth, async (req: AuthedRequest, res) => {
@@ -152,7 +145,6 @@ router.get("/search", requireAuth, async (req: AuthedRequest, res) => {
   }
 });
 
-// Single email (detail view). Declared last so it never shadows the fixed routes above.
 router.get("/:id", requireAuth, async (req: AuthedRequest, res) => {
   const id = z.string().uuid().safeParse(req.params.id);
   if (!id.success) return res.status(404).json({ error: "Not found" });

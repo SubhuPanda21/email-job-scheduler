@@ -6,7 +6,6 @@ const run = (cmd: string, value?: string) => document.execCommand(cmd, false, va
 
 function Tool({ cmd, value, label, children }: { cmd: string; value?: string; label: string; children: ReactNode }) {
   return (
-    // onMouseDown + preventDefault keeps the text selection while clicking the toolbar
     <button type="button" aria-label={label} title={label} onMouseDown={(e) => { e.preventDefault(); run(cmd, value); }}
       className="rounded p-1.5 text-gray-600 hover:bg-gray-100">
       {children}
@@ -15,7 +14,6 @@ function Tool({ cmd, value, label, children }: { cmd: string; value?: string; la
 }
 const Divider = () => <span className="mx-1 h-4 w-px bg-gray-200" />;
 
-/** Lightweight rich-text editor (contentEditable). Output is HTML; the API sanitizes it before storing. */
 export function RichTextEditor({ onChange }: { onChange: (html: string) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   return (

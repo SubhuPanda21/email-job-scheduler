@@ -2,7 +2,6 @@ import { Client } from "@elastic/elasticsearch";
 import { env } from "../config/env";
 import { htmlToPreview } from "../utils/render";
 
-// Index plain text, not HTML markup, so searches never match tag names.
 const plain = (d: { body: string }) => ({ ...d, body: htmlToPreview(d.body, 5000) });
 
 export const esClient = new Client({ node: env.esUrl });
@@ -38,7 +37,6 @@ export async function ensureIndex() {
   });
 }
 
-/** Upsert by id - same doc is written at schedule time (SCHEDULED) and again on send (SENT/FAILED). */
 export async function indexEmail(doc: EmailDoc) {
   await esClient.index({ index: env.esIndex, id: doc.id, document: plain(doc) });
 }
@@ -50,7 +48,6 @@ export async function bulkIndex(docs: EmailDoc[]) {
   if (res.errors) console.error("[es] some bulk items failed");
 }
 
-/** Always filtered by userId - a user can only ever search their own emails. */
 export async function searchEmails(query: string, userId: string, status?: string) {
   const filter: object[] = [{ term: { userId } }];
   if (status) filter.push({ term: { status } });

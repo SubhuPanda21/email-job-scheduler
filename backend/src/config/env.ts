@@ -20,7 +20,7 @@ export const env = {
 
   smtpHost: required("ETHEREAL_SMTP_HOST", "smtp.ethereal.email"),
   smtpPort: Number(process.env.ETHEREAL_SMTP_PORT ?? 587),
-  // "email:pass,email:pass" — multiple simulated senders, each rate-limited independently
+ 
   etherealSenders: (process.env.ETHEREAL_SENDERS ?? "")
     .split(",")
     .filter(Boolean)
