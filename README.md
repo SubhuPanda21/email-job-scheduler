@@ -3,7 +3,6 @@
 A full-stack email job scheduler built for the Outbox Labs (ReachInbox) SDE Intern take-home assignment. It schedules cold emails at scale, survives restarts without losing or duplicating a single job, and enforces per-sender throughput limits the way a real sending infrastructure has to.
 
 **Live queue dashboard:** `http://localhost:4000/admin/queues` (after you run it locally)
-**Figma:** [Outbox Labs Assignment](https://www.figma.com/design/kOTwGlESjijCYnMgtHfvfU/Outbox-Labs-Assignment)
 **Demo video:** `<add your link here before submitting>`
 
 ---
